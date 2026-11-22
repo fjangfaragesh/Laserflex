@@ -1,0 +1,238 @@
+
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ANYCUBIC 3 MAX - G-Code Scanner</title>
+
+<style>
+body {
+    font-family: Arial, sans-serif;
+    background: #20242b;
+    color: #eee;
+    max-width: 650px;
+    margin: 30px auto;
+    padding: 20px;
+}
+
+h1 { font-size: 23px; }
+
+.panel {
+    background: #303640;
+    padding: 20px;
+    border-radius: 10px;
+    margin-bottom: 15px;
+}
+
+label {
+    display: block;
+    margin-top: 15px;
+}
+
+input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px;
+    margin-top: 5px;
+    background: #20242b;
+    color: white;
+    border: 1px solid #59616d;
+    border-radius: 5px;
+    font-size: 16px;
+}
+
+button {
+    width: 100%;
+    padding: 14px;
+    margin-top: 15px;
+    border: 0;
+    border-radius: 6px;
+    background: #2588df;
+    color: white;
+    font-size: 16px;
+    cursor: pointer;
+}
+
+button:hover { background: #1471c3; }
+
+pre {
+    background: #171a1f;
+    padding: 15px;
+    border-radius: 6px;
+    overflow-x: auto;
+    white-space: pre;
+    font-size: 12px;
+    max-height: 300px;
+}
+
+.info {
+    color: #aaa;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+</style>
+</head>
+
+<body>
+
+<h1>ANYCUBIC 3 MAX</h1>
+<h3>G-Code Scan Generator (X / Z)</h3>
+
+<div class="panel">
+
+    <label>Breite des Scanbereichs (mm)</label>
+    <input type="number" id="width" value="100" min="1" step="1">
+
+    <label>Höhe des Scanbereichs (mm)</label>
+    <input type="number" id="height" value="50" min="1" step="1">
+
+    <label>Anzahl der Scanlinien</label>
+    <input type="number" id="lines" value="10" min="1" step="1">
+
+    <label>Geschwindigkeit (mm/s)</label>
+    <input type="number" id="speed" value="10" min="0.1" step="0.1">
+
+    <button onclick="generateGCode()">
+        G-Code generieren
+    </button>
+
+    <button onclick="downloadGCode()">
+        G-Code herunterladen
+    </button>
+
+</div>
+
+<div class="panel">
+    <h3>G-Code Vorschau</h3>
+    <pre id="output">Noch kein G-Code generiert.</pre>
+</div>
+
+<div class="panel info">
+    <strong>Sicherheitshinweise:</strong><br><br>
+    • Ausschließlich relative Bewegungen (G91).<br>
+    • Kein Homing.<br>
+    • Keine Heizung.<br>
+    • Kein Extrudieren.<br>
+    • Startposition ist die aktuelle Position.<br>
+    • Der Scanbereich muss innerhalb des mechanischen Verfahrwegs liegen.
+</div>
+
+<script>
+
+let generatedCode = "";
+
+function generateGCode() {
+
+    const width = Number(document.getElementById("width").value);
+    const height = Number(document.getElementById("height").value);
+    const lines = Number(document.getElementById("lines").value);
+    const speed = Number(document.getElementById("speed").value);
+
+    if (
+        !Number.isFinite(width) ||
+        !Number.isFinite(height) ||
+        !Number.isInteger(lines) ||
+        !Number.isFinite(speed) ||
+        width <= 0 ||
+        height <= 0 ||
+        lines < 1 ||
+        speed <= 0
+    ) {
+        alert("Bitte gültige Werte eingeben!");
+        return;
+    }
+
+    // Geschwindigkeit in mm/min
+    const feedrate = Math.round(speed * 60);
+
+    // Abstand zwischen den Scanlinien
+    const stepZ = lines > 1
+        ? height / (lines - 1)
+        : 0;
+
+    // Startpunkt relativ zur aktuellen Position
+    const startX = -(width / 2);
+    const startZ = -(height / 2);
+
+    let gcode = [];
+
+    gcode.push("; ANYCUBIC 3 MAX");
+    gcode.push("; X/Z Raster Scan");
+    gcode.push("; Relative Bewegungen");
+    gcode.push("; Kein Homing / Heating / Extruding");
+    gcode.push("");
+    gcode.push("G91 ; Relative Positionierung");
+    gcode.push("");
+
+    gcode.push("; Zum Startpunkt fahren (erste Ecke)");
+    gcode.push(
+        `G1 X${startX.toFixed(3)} Z${startZ.toFixed(3)} F${feedrate}`
+    );
+
+    gcode.push("");
+
+    for (let i = 0; i < lines; i++) {
+
+        gcode.push(`; Scanlinie ${i + 1}`);
+
+        if (i % 2 === 0) {
+            gcode.push(`G1 X${width.toFixed(3)} F${feedrate}`);
+        } else {
+            gcode.push(`G1 X-${width.toFixed(3)} F${feedrate}`);
+        }
+
+        if (i < lines - 1) {
+            gcode.push(`G1 Z${stepZ.toFixed(3)} F${feedrate}`);
+        }
+
+        gcode.push("");
+    }
+
+    // Zurück zur ursprünglichen Mitte
+    gcode.push("; Zurueck zur Mitte");
+    gcode.push(
+        `G1 X${(i = 0, width / 2 * (lines % 2 === 0 ? -1 : 1)).toFixed(3)} Z${(height / 2).toFixed(3)} F${feedrate}`
+    );
+
+    gcode.push("M400 ; Bewegungen abschließen");
+    gcode.push("; Ende des Scanvorgangs");
+
+    generatedCode = gcode.join("\n");
+
+    document.getElementById("output").textContent =
+        generatedCode;
+}
+
+function downloadGCode() {
+
+    if (!generatedCode) {
+        generateGCode();
+    }
+
+    if (!generatedCode) return;
+
+    const blob = new Blob(
+        [generatedCode],
+        { type: "text/plain" }
+    );
+
+    const url = URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "ANYCUBIC_3MAX_SCAN.gcode";
+
+    link.click();
+
+    URL.revokeObjectURL(url);
+}
+
+// Initiale Vorschau
+generateGCode();
+
+</script>
+
+</body>
+</html>

@@ -382,7 +382,7 @@ class LaserFlexProcessOptions:
         )
 
         line_scan.frame_features = np.zeros(
-            (frame_count, 3),
+            (frame_count, 5),
             dtype=np.float32
         )
 
@@ -429,6 +429,10 @@ class LaserFlexProcessOptions:
                 u_cut_feature3
             )
 
+
+            line_scan.frame_features[frame_idx, 3] = BildschwerpunktX(u_rect)*255
+            line_scan.frame_features[frame_idx, 4] = BildschwerpunktY(u_rect)*255
+            
             # Kacheln
             tiles = u_rect.reshape(
                 resolution_y,
@@ -462,6 +466,37 @@ class LaserFlexProcessOptions:
         return line_scan
 
 
+def BildschwerpunktX(image):
+    gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY).astype(np.float64)
+
+    height, width = gray.shape
+    weights = gray
+
+    total_weight = np.sum(weights)
+    if total_weight == 0:
+        return 0.5
+
+    x = np.arange(width)
+    center_x = np.sum(weights * x[np.newaxis, :]) / total_weight
+
+    return center_x / (width - 1)
+
+
+def BildschwerpunktY(image):
+    gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY).astype(np.float64)
+
+    height, width = gray.shape
+    weights = gray
+
+    total_weight = np.sum(weights)
+    if total_weight == 0:
+        return 0.5
+
+    y = np.arange(height)
+    center_y = np.sum(weights * y[:, np.newaxis]) / total_weight
+
+    return center_y / (height - 1)
+    
 # -------------------------- LINE SCAN DATA --------------------------
 
 
